@@ -1,0 +1,21 @@
+services:
+  waha:
+    image: devlikeapro/waha:latest
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - WAHA_API_KEY=593a815b32df4ce5b31f3ba2d77e75c6
+      - WAHA_DASHBOARD_USERNAME=elo_admin
+      - WAHA_DASHBOARD_PASSWORD=elo_password_123
+      - WHATSAPP_DEFAULT_ENGINE=WEBJS
+      - WAHA_PRINT_QR=False
+      # Persist session data
+    volumes:
+      - ./.waha/sessions:/app/sessions
+
+  redis:
+    image: redis:alpine
+    restart: always
+    ports:
+      - "6379:6379"
