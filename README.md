@@ -1,3 +1,4 @@
+
 # ELO Assistente Cidadão
 
 Assistente conversacional focado em acessibilidade cidadã via WhatsApp. Ele orquestra STT, visão computacional, LLM e TTS para receber perguntas por texto, áudio ou imagem e responder com linguagem simples.
@@ -85,3 +86,8 @@ Execute os testes unitários básicos:
 cd backend
 pytest
 ```
+```bash
+cd backend
+pytest
+```
+
