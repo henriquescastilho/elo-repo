@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     azure_tts_deployment_name: str | None = Field(default="gpt-4o-mini-tts")
     azure_stt_deployment_name: str | None = Field(default="whisper-1")
     
-    llm_model_name: str = Field(default="gpt-4o")
+    llm_model_name: str = Field(default="gpt-5-mini")
     tts_model_name: str = Field(default="gpt-4o-mini-tts")
     tts_voice: str = Field(default="alloy")
     stt_model_name: str = Field(default="whisper-1")

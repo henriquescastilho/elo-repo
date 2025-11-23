@@ -1,20 +1,20 @@
 import pytest
+from unittest.mock import patch
 from backend.app.services.datahub import aggregator
 
 @pytest.mark.anyio
 async def test_search_legal_sources():
-    # Test "legal_only" mode (Camara + Senado)
-    # Using a query that triggers the mocks
-    query = "saude"
-    results = await aggregator.search_legal_sources(query)
+    mock_camara = [{"source": "camara", "id": "1", "titulo": "PL 1", "conteudo": "Lei", "link": "http", "data": "2024"}]
+    mock_senado = [{"source": "senado", "id": "2", "titulo": "PL 2", "conteudo": "Lei", "link": "http", "data": "2024"}]
     
-    assert isinstance(results, list)
-    # We expect at least one result from Senado mock (contains "saude")
-    # Camara mock might return if it hits the real API or if we mock it too.
-    # Since Camara service hits real API, it might fail if no network, but let's assume network or empty list.
-    
-    # Check if results are normalized
-    if results:
+    with patch("backend.app.services.datahub.camara_service.fetch", return_value=mock_camara), \
+         patch("backend.app.services.datahub.senado_service.fetch", return_value=mock_senado):
+        
+        results = await aggregator.search_legal_sources("saude")
+        
+        assert isinstance(results, list)
+        assert len(results) == 2
+        
         first = results[0]
         assert "id" in first
         assert "title" in first
@@ -23,11 +23,19 @@ async def test_search_legal_sources():
 
 @pytest.mark.anyio
 async def test_search_all_sources():
-    # Test "all" mode
-    query = "transporte" # Triggers Querido Diario mock
-    results = await aggregator.search_all_sources(query)
+    mock_qd = [{"source": "qd", "id": "3", "titulo": "DO", "conteudo": "Decreto", "link": "http", "data": "2024"}]
     
-    assert isinstance(results, list)
-    # Should find Querido Diario mock result
-    found_qd = any(r["source"] == "qd" for r in results)
-    assert found_qd
+    # We only need to verify that it aggregates correctly, so we can mock just one or all.
+    # The aggregator calls all services. We should mock all to avoid network calls.
+    with patch("backend.app.services.datahub.camara_service.fetch", return_value=[]), \
+         patch("backend.app.services.datahub.senado_service.fetch", return_value=[]), \
+         patch("backend.app.services.datahub.queridodiario_service.fetch", return_value=mock_qd), \
+         patch("backend.app.services.datahub.basedosdados_service.fetch", return_value=[]), \
+         patch("backend.app.services.datahub.tse_service.fetch", return_value=[]), \
+         patch("backend.app.services.datahub.datajud_service.fetch", return_value=[]):
+        
+        results = await aggregator.search_all_sources("transporte")
+        
+        assert isinstance(results, list)
+        found_qd = any(r["source"] == "qd" for r in results)
+        assert found_qd

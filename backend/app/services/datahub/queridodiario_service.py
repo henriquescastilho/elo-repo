@@ -38,16 +38,4 @@ async def fetch(query: str) -> List[Dict[str, Any]]:
             return [r for r in results if r.get("id")]
     except Exception as exc:
         logger.warning("DataHub: Falha no Querido Diário: %s", exc)
-        # Fallback mock para ambientes sem rede
-        if "transporte" in query_lower or "ônibus" in query_lower or "onibus" in query_lower:
-            return [
-                {
-                    "source": "qd",
-                    "id": "QD-MOCK-TRANS-2024",
-                    "titulo": "Diário Oficial - Licitação de ônibus elétricos",
-                    "conteudo": "Abertura de licitação para renovação da frota de ônibus elétricos.",
-                    "data": "2024-01-01",
-                    "link": base_url,
-                }
-            ]
         return []

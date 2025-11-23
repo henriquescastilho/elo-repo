@@ -17,6 +17,18 @@ FALLBACK_LLM_MESSAGE = (
 )
 
 
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, RetryCallState
+
+def return_fallback_on_failure(retry_state: RetryCallState) -> Tuple[str, bool]:
+    logger.error("Tenacity retries exhausted: %s", retry_state.outcome.exception())
+    return FALLBACK_LLM_MESSAGE, False
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    reraise=True,
+    retry_error_callback=return_fallback_on_failure
+)
 async def _call_llm_openai(messages: List[dict[str, Any]], settings: Settings) -> Tuple[str, bool]:
     provider = (settings.llm_provider or "openai").lower()
     client = None
@@ -63,7 +75,15 @@ async def _call_llm_openai(messages: List[dict[str, Any]], settings: Settings) -
         response = await client.chat.completions.create(**create_kwargs)
     except Exception as exc:  # pragma: no cover - external dependency path
         logger.exception("%s chat completion falhou: %s", provider.upper(), exc)
-        return FALLBACK_LLM_MESSAGE, False
+        # Tenacity will catch this if we re-raise, but the original code returned a fallback.
+        # To make tenacity work, we MUST raise the exception so it can retry.
+        # After retries are exhausted, tenacity will raise the exception.
+        # We need to handle the final failure outside or let it bubble up.
+        # However, the signature expects (str, bool).
+        # Let's raise here to trigger retry, and catch in the caller?
+        # Or better: The original code swallowed exceptions.
+        # If I want retry, I must raise.
+        raise exc
 
     content = ""
     if response.choices:

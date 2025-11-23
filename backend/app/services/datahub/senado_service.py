@@ -70,16 +70,4 @@ async def fetch(query: str) -> List[Dict[str, Any]]:
             return [r for r in results if r.get("id")]
     except Exception as exc:
         logger.warning("DataHub: Falha no Senado: %s", exc)
-        # Fallback mock para ambientes sem rede (mantém testes e UX)
-        if any(k in query_lower for k in ["saude", "sus", "saúde"]):
-            return [
-                {
-                    "source": "senado",
-                    "id": "SENADO-MOCK-TELEMED",
-                    "titulo": "Projeto de Lei do Senado sobre Telemedicina",
-                    "conteudo": "Regulamenta o uso de telemedicina no SUS de forma permanente.",
-                    "data": "2024",
-                    "link": "https://www25.senado.leg.br/web/atividade/materias/-/materia/123456",
-                }
-            ]
         return []

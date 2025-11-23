@@ -11,4 +11,5 @@ anyio
 redis
 python-multipart
 tenacity
+tenacity
 sentry-sdk

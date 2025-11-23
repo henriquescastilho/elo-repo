@@ -43,16 +43,4 @@ async def fetch(query: str) -> List[Dict[str, Any]]:
             return [r for r in results if r.get("id")]
     except Exception as exc:
         logger.warning("DataHub: Falha na Base dos Dados: %s", exc)
-        # Fallback mock para ambientes sem rede
-        if "populacao" in query_lower or "população" in query_lower or "censo" in query_lower:
-            return [
-                {
-                    "source": "bd",
-                    "id": "BD-MOCK-CENSO-2022",
-                    "titulo": "Censo Demográfico 2022",
-                    "conteudo": "Dados preliminares do Censo 2022 indicam crescimento populacional desacelerado.",
-                    "data": "2022",
-                    "link": "https://basedosdados.org/dataset/br-ibge-censo-demografico",
-                }
-            ]
         return []
