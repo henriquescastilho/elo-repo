@@ -9,6 +9,7 @@ class NormalizedMessage(BaseModel):
     media_url: Optional[str] = None
     media_bytes: Optional[bytes] = None
     mime_type: Optional[str] = None
+    provider: Optional[str] = None
 
 
 class OutgoingMessage(BaseModel):

@@ -8,6 +8,9 @@ from backend.app.config import Settings, get_settings
 from backend.app.core.llm import prompt_base
 from backend.app.models.schemas import NormalizedMessage
 from backend.app.services import cache_service, rag_service
+import io
+import httpx
+import pypdf
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +155,44 @@ async def _update_conversation_history(user_id: str, user_text: str, bot_text: s
     await cache_service.set_user_state(user_id, state)
 
 
+def _build_oracle_context_block(context: Any) -> str:
+    """
+    Constrói bloco de contexto específico do Modo Oráculo a partir de um OracleContext,
+    se fornecido, ou de um NormalizedMessage simples.
+    """
+    contexto = getattr(context, "contexto_oraculo", None)
+    if isinstance(contexto, dict):
+        tipo = contexto.get("tipo_arquivo") or "desconhecido"
+        meta = contexto.get("metadados") or {}
+        texto = (contexto.get("texto_extraido") or "").strip()
+        tamanho = len(texto)
+        preview = texto[:1000]
+
+        logger.info(
+            "[ORACULO] tipo=%s tamanho=%d metadados=%s",
+            tipo,
+            tamanho,
+            {k: meta[k] for k in list(meta.keys())[:10]},
+        )
+
+        return (
+            "### CONTEXTO DO DOCUMENTO ENVIADO PELO USUÁRIO (MODO ORÁCULO)\n"
+            f"- Tipo de conteúdo: {tipo}\n"
+            f"- Metadados principais: {meta}\n"
+            f"- Tamanho aproximado do texto extraído: {tamanho} caracteres\n\n"
+            "Trecho inicial do conteúdo extraído (use apenas como base factual, "
+            "sem inventar informações que não estejam aqui):\n"
+            f"{preview}\n"
+        )
+
+    # Fallback simples se não houver contexto estruturado.
+    return (
+        "(Modo Oráculo) Explique apenas o conteúdo concreto do arquivo, "
+        "imagem, áudio ou link enviado. Não dê conselhos emocionais, "
+        "não faça julgamentos e não extrapole além do que está no material."
+    )
+
+
 async def answer_user_question(
     user_text: str,
     context: NormalizedMessage | Any = None,
@@ -174,24 +215,19 @@ async def answer_user_question(
     # Se for Oráculo, pulamos o RAG legislativo e focamos no contexto da mensagem (media, arquivos)
     if flow_key == "oraculo":
         logger.info("Fluxo Oráculo: pulando RAG legislativo.")
-        legislative_context = "(Modo Oráculo: Responda com base no arquivo/áudio/imagem enviado pelo usuário)"
+        legislative_context = _build_oracle_context_block(context)
     else:
         # Define RAG mode based on flow
+        # VOTOS: usa apenas fontes legislativas (Câmara + Senado).
+        # ELO: usa RAG legal quando o texto indicar termos jurídicos/benefícios.
         rag_mode = "legal_only" if flow_key == "votos" else "mock"
-        
-        # For ELO, we might want to use "all" if the query implies searching for services, 
-        # but for now let's stick to "mock" or "legal_only" as per plan.
-        # Actually, let's use "all" for VOTOS to get everything, and "legal_only" for ELO if needed.
-        # Plan says: VOTOS -> RAG federado sempre. ELO -> RAG só para direito.
-        
-        if flow_key == "votos":
-            rag_mode = "all"
-        elif flow_key == "elo":
+
+        if flow_key == "elo":
             # Simple heuristic: if query has "lei", "direito", "beneficio", use legal search
             if any(k in normalized_question for k in ["lei", "direito", "beneficio", "auxilio"]):
                 rag_mode = "legal_only"
             else:
-                rag_mode = "mock" # Or skip RAG?
+                rag_mode = "mock"
 
         try:
             documents = await rag_service.search_relevant_documents(normalized_question, mode=rag_mode)
@@ -224,7 +260,7 @@ async def answer_user_question(
     user_prompt = (
         f"Histórico da conversa:\n{history_text}\n\n"
         f"Pergunta atual do usuário: {normalized_question}\n"
-        "Contexto federado (resuma em poucas linhas):\n"
+        f"Contexto de Apoio:\n"
         f"{legislative_context or '- Sem contexto externo; responda com orientação geral e clara.'}\n"
         "Responda em português brasileiro simples, frases curtas, e inclua um exemplo prático quando ajudar a entender."
     )
@@ -246,19 +282,46 @@ async def answer_user_question(
             messages.append({"role": "user", "content": user_content})
         elif msg_type == "file":
             logger.info("Incorporating file info into LLM prompt: %s", context.media_url)
-            # For now, we just tell the LLM a file was sent.
-            # Ideally, we would extract text here if possible.
-            file_prompt = (
-                f"{user_prompt}\n\n"
-                f"[SISTEMA: O usuário enviou um arquivo/documento. URL: {context.media_url}. "
-                "Se for um PDF ou documento que você não consegue ler diretamente, avise o usuário que recebeu "
-                "e pergunte do que se trata, ou peça para ele mandar uma foto se for curto.]"
-            )
+            
+            # Try to download and extract text if it's a PDF
+            extracted_text = ""
+            if context.media_url and context.media_url.lower().endswith(".pdf"):
+                try:
+                    async with httpx.AsyncClient() as client:
+                        resp = await client.get(context.media_url)
+                        if resp.status_code == 200:
+                            pdf_file = io.BytesIO(resp.content)
+                            reader = pypdf.PdfReader(pdf_file)
+                            text_parts = []
+                            for page in reader.pages:
+                                text_parts.append(page.extract_text())
+                            extracted_text = "\n".join(text_parts)
+                            logger.info("Extracted %d chars from PDF", len(extracted_text))
+                except Exception as exc:
+                    logger.warning("Failed to extract PDF text: %s", exc)
+
+            if extracted_text:
+                file_prompt = (
+                    f"{user_prompt}\n\n"
+                    f"[SISTEMA: O usuário enviou um arquivo PDF. Conteúdo extraído abaixo:]\n"
+                    f"--- INÍCIO DO ARQUIVO ---\n{extracted_text[:20000]}\n--- FIM DO ARQUIVO ---\n"
+                    "Analise o conteúdo acima para responder."
+                )
+            else:
+                file_prompt = (
+                    f"{user_prompt}\n\n"
+                    f"[SISTEMA: O usuário enviou um arquivo/documento. URL: {context.media_url}. "
+                    "Se for um PDF ou documento que você não consegue ler diretamente, avise o usuário que recebeu "
+                    "e pergunte do que se trata, ou peça para ele mandar uma foto se for curto.]"
+                )
             messages.append({"role": "user", "content": file_prompt})
         else:
             messages.append({"role": "user", "content": user_prompt})
     else:
         messages.append({"role": "user", "content": user_prompt})
+
+    if flow_key == "oraculo":
+        logger.info("[ORACULO] enviado ao modelo provider=%s", (settings.llm_provider or "openai").lower())
 
     answer, success = await _call_llm_openai(messages, settings)
     if success:

@@ -73,21 +73,29 @@ def _deduplicate_and_normalize(results_list: List[List[Dict[str, Any]]]) -> List
     unique_results = []
     for item in aggregated:
         doc_id = item.get("id")
-        if doc_id and doc_id not in seen_ids:
-            seen_ids.add(doc_id)
-            # Normalização final (garantir campos)
-            normalized = {
-                "id": doc_id,
-                "titulo": item.get("titulo") or item.get("title") or "Sem título",
-                "title": item.get("title") or item.get("titulo") or "Sem título",
-                "ementa": item.get("conteudo") or item.get("ementa") or item.get("summary") or "",
-                "summary": item.get("summary") or item.get("conteudo") or item.get("ementa") or "",
-                "ano": item.get("data") or item.get("ano"),
-                "source": item.get("source") or "unknown",
-                "link": item.get("link") or item.get("url") or "",
-                "raw_metadata": item,
-            }
-            unique_results.append(normalized)
+        if not doc_id or doc_id in seen_ids:
+            continue
+
+        seen_ids.add(doc_id)
+
+        raw_year = item.get("ano") or item.get("data")
+        raw_url = item.get("url") or item.get("link") or ""
+
+        # Normalização final (garantir campos compatíveis com o RAG e com o contrato do DataHub)
+        normalized = {
+            "id": doc_id,
+            "titulo": item.get("titulo") or item.get("title") or "Sem título",
+            "title": item.get("title") or item.get("titulo") or "Sem título",
+            "ementa": item.get("conteudo") or item.get("ementa") or item.get("summary") or "",
+            "summary": item.get("summary") or item.get("conteudo") or item.get("ementa") or "",
+            "ano": raw_year,
+            "year": raw_year,
+            "source": item.get("source") or "unknown",
+            "link": raw_url,
+            "url": raw_url,
+            "raw_metadata": item,
+        }
+        unique_results.append(normalized)
             
     logger.info("DataHub Aggregator: Encontrados %d documentos únicos.", len(unique_results))
     return unique_results

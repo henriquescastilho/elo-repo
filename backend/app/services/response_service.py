@@ -1,13 +1,21 @@
-"""
-Utilities to send responses (text and optional audio) to WhatsApp users.
-"""
+"""Utilities to send responses (texto e áudio) para os canais suportados."""
 
 import logging
-from typing import Any
+import os
+from pathlib import Path
+from typing import Any, Tuple
+from urllib.parse import urlparse
+
+import httpx
 
 from backend.app.config import Settings, get_settings
 from backend.app.core.tts import service as tts_core
-from backend.app.services import whatsapp_provider_twilio, whatsapp_provider_waha, whatsapp_provider_console
+from backend.app.services import (
+    telegram_provider,
+    whatsapp_provider_console,
+    whatsapp_provider_twilio,
+    whatsapp_provider_waha,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +93,10 @@ async def responder_usuario(to: str, text: str, mode: str = "auto", context: Any
     Always send text; optionally synthesize and send audio.
     mode: "texto" | "texto+audio" | "auto" (usa settings.send_audio_default).
     """
+    is_telegram, chat_id = _resolve_telegram_target(to, context)
+    if is_telegram:
+        return await _responder_telegram(chat_id, to, text, mode, context)
+
     settings = get_settings()
     
     # Send Text
@@ -103,3 +115,71 @@ async def responder_usuario(to: str, text: str, mode: str = "auto", context: Any
 
     return {"provider": provider_used, "audio_sent": audio_sent}
 
+
+def _resolve_telegram_target(to: str, context: Any | None) -> Tuple[bool, str]:
+    """
+    Verifica se a mensagem deve ser enviada via Telegram.
+    - user_id com prefixo tg:
+    - context.provider == 'telegram'
+    Retorna (is_telegram, chat_id_sem_prefixo)
+    """
+    if to.startswith("tg:"):
+        return True, to.removeprefix("tg:")
+
+    provider = getattr(context, "provider", None)
+    if provider and provider.lower() == "telegram":
+        chat_id = getattr(context, "user_id", to)
+        chat_id = str(chat_id)
+        if chat_id.startswith("tg:"):
+            chat_id = chat_id.removeprefix("tg:")
+        return True, chat_id
+
+    return False, to
+
+
+async def _load_bytes_from_url(url: str) -> bytes | None:
+    """Busca bytes a partir de uma URL http(s) ou caminho local resolvido pelo /media."""
+    parsed = urlparse(url)
+    if parsed.scheme in ("", "file"):
+        path = Path(url.replace("file://", ""))
+        if path.exists():
+            return path.read_bytes()
+
+    media_root = Path(os.getcwd())
+    if parsed.path.startswith("/media/"):
+        candidate = media_root / parsed.path.lstrip("/")
+        if candidate.exists():
+            return candidate.read_bytes()
+
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            return resp.content
+    except Exception:
+        logger.warning("Não foi possível baixar mídia para Telegram: %s", url)
+        return None
+
+
+async def _responder_telegram(chat_id: str, user_ref: str, text: str, mode: str, context: Any | None) -> dict:
+    """
+    Envia respostas via Telegram, respeitando sandbox e não afetando WAHA.
+    """
+    await telegram_provider.send_text(chat_id, text)
+
+    audio_sent = False
+    settings = get_settings()
+    if _should_send_audio(mode, settings):
+        try:
+            audio_url = await tts_core.synthesize(text, context)
+            audio_bytes = await _load_bytes_from_url(audio_url)
+            if audio_bytes:
+                filename = Path(urlparse(audio_url).path).name or "audio.ogg"
+                await telegram_provider.send_audio(chat_id, audio_bytes, filename=filename)
+                audio_sent = True
+            else:
+                logger.warning("[TELEGRAM] Falha ao obter bytes do áudio para %s", user_ref)
+        except Exception:
+            logger.exception("[TELEGRAM] Erro ao enviar áudio para %s", user_ref)
+
+    return {"provider": "telegram", "audio_sent": audio_sent}

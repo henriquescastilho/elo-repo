@@ -11,11 +11,18 @@ logger = logging.getLogger(__name__)
 FALLBACK_AUDIO_URL = "https://example.com/audio.mp3"
 
 
-def _tts_output_path() -> Path:
-    base = Path(__file__).resolve().parent.parent
-    target = base / "media" / "tts"
-    target.mkdir(parents=True, exist_ok=True)
-    return target / f"{uuid.uuid4()}.mp3"
+import os
+
+def _tts_output_path() -> Tuple[Path, str]:
+    # Use /app/media as default in Docker, or relative media in local dev
+    # main.py mounts os.path.join(os.getcwd(), "media")
+    # In Docker, cwd is /app.
+    media_root = Path(os.getcwd()) / "media"
+    tts_dir = media_root / "tts"
+    tts_dir.mkdir(parents=True, exist_ok=True)
+    
+    filename = f"{uuid.uuid4()}.mp3"
+    return tts_dir / filename, filename
 
 
 async def _call_tts_openai(text: str, settings: Settings) -> Tuple[str, bool]:
@@ -59,7 +66,7 @@ async def _call_tts_openai(text: str, settings: Settings) -> Tuple[str, bool]:
             logger.warning("SDK OpenAI não está instalado para TTS.")
             return FALLBACK_AUDIO_URL, False
 
-    output_path = _tts_output_path()
+    output_path, filename = _tts_output_path()
     try:
         async with client.audio.speech.with_streaming_response.create(
             model=model,
@@ -72,7 +79,14 @@ async def _call_tts_openai(text: str, settings: Settings) -> Tuple[str, bool]:
         logger.exception("%s TTS falhou: %s", provider.upper(), exc)
         return FALLBACK_AUDIO_URL, False
 
-    return str(output_path), True
+    # Construct URL for WAHA
+    # Assuming backend is accessible at 'backend' hostname in Docker network
+    # Port 8000 is standard.
+    # TODO: Make base URL configurable via settings
+    api_url = getattr(settings, "api_public_url", "http://backend:8000")
+    full_url = f"{api_url}/media/tts/{filename}"
+    
+    return full_url, True
 
 
 async def generate_tts_and_upload(text: str, context: Any) -> str:

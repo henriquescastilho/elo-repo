@@ -88,6 +88,7 @@ async def whatsapp_webhook(request: Request) -> JSONResponse:
     media = payload.get("media") or {}
     media_url = media.get("url") or payload.get("mediaUrl")
     mime_type = media.get("mimetype") or payload.get("mimetype")
+    file_name = media.get("filename") or payload.get("filename")
     has_media = bool(payload.get("hasMedia")) or bool(media_url)
     message_id = (
         payload.get("id")
@@ -125,6 +126,7 @@ async def whatsapp_webhook(request: Request) -> JSONResponse:
     media_bytes = None
 
     if has_media and media_url:
+        logger.info("[WAHA] Baixando mídia type=%s url=%s filename=%s", normalized_type, media_url, file_name)
         media_bytes, resolved_mime = await _download_media(media_url, settings)
         mime_type = mime_type or resolved_mime
 
@@ -146,6 +148,7 @@ async def whatsapp_webhook(request: Request) -> JSONResponse:
         media_url=media_url,
         media_bytes=media_bytes,
         mime_type=mime_type,
+        provider="whatsapp",
     )
     try:
         routed = await dispatch_message(normalized_message)

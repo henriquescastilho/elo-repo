@@ -13,3 +13,4 @@ python-multipart
 tenacity
 tenacity
 sentry-sdk
+pypdf

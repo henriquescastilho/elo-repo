@@ -22,6 +22,11 @@ Camada de abstração que unifica múltiplas fontes de dados públicos:
   - `basedosdados_service`: Estatísticas e dados estruturados.
   - `tse_service`: Dados eleitorais.
   - `datajud_service`: Jurisprudência e processos.
+- **Cobertura completa recomendada**: usar `LEGAL_DATA_SOURCE_MODE=all` para puxar tudo destas fontes:
+  - Câmara: https://dadosabertos.camara.leg.br/swagger/api.html
+  - Senado: https://www12.senado.leg.br/dados-abertos
+  - Querido Diário: https://queridodiario.ok.org.br/tecnologia/api
+  - Base dos Dados: https://basedosdados.org/
 
 ### 3. RAG Avançado (`backend/app/services/rag_service.py`)
 Sistema de Recuperação Aumentada por Geração:
@@ -43,6 +48,9 @@ Sistema de Recuperação Aumentada por Geração:
 - **WhatsApp Provider**:
   - **WAHA (WhatsApp HTTP API)**: Principal gateway.
   - **Console/Sandbox**: Para desenvolvimento e testes sem celular.
+- **Telegram Provider**:
+  - Webhook dedicado em `/webhook/telegram` (com secret opcional).
+  - Provider próprio (`telegram_provider`) para `sendMessage`, `sendAudio`, `sendPhoto`, respeitando sandbox.
 - **Multimodalidade**:
   - **TTS**: Geração de áudio para respostas (OpenAI Audio).
   - **STT**: Transcrição de mensagens de voz (Whisper).
@@ -50,14 +58,14 @@ Sistema de Recuperação Aumentada por Geração:
 
 ## Fluxo de Dados
 
-1. **Entrada**: Webhook recebe mensagem (`POST /webhook/whatsapp`).
+1. **Entrada**: Webhook recebe mensagem (`POST /webhook/whatsapp` ou `POST /webhook/telegram`).
 2. **Roteamento**: `dispatch_message` detecta intenção.
 3. **Processamento**:
    - Se **ORÁCULO**: Processa mídia/link diretamente.
    - Se **VOTOS**: Aciona DataHub para buscar dados legislativos + RAG.
    - Se **ELO**: Aciona RAG para base legal de direitos (se necessário) ou responde com conhecimento geral.
 4. **Geração**: LLM gera resposta em linguagem simples com base no contexto.
-5. **Saída**: Texto (e opcionalmente áudio) enviado via Provider.
+5. **Saída**: Texto (e opcionalmente áudio) enviado via Provider (WAHA/Twilio/Console ou Telegram).
 
 ## Infraestrutura
 - **Backend**: FastAPI (Python 3.11+).

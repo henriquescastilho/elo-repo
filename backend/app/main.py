@@ -2,7 +2,7 @@ from fastapi import FastAPI
 
 from backend.app.core import logging  # noqa: F401 ensures logging config is applied
 from backend.app.config import get_settings
-from backend.app.routes import debug, health, whatsapp_webhook
+from backend.app.routes import debug, health, whatsapp_webhook, telegram_webhook
 import sentry_sdk
 
 settings = get_settings()
@@ -20,6 +20,7 @@ import os
 
 app.include_router(health.router)
 app.include_router(whatsapp_webhook.router)
+app.include_router(telegram_webhook.router)
 app.include_router(debug.router)
 
 # Mount media directory for static access (TTS, etc)

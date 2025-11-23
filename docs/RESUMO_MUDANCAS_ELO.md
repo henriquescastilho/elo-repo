@@ -28,6 +28,8 @@ Centralização de acesso a dados públicos. Em vez de consultar apenas uma font
 - **Logs Estruturados**: Logs em JSON para fácil ingestão em ferramentas de observabilidade.
 - **Sandbox WhatsApp**: Desenvolva sem precisar de um celular conectado o tempo todo.
 - **Testes Automatizados**: Cobertura de testes para garantir a estabilidade das intenções e integrações.
+- **Novo Canal Telegram**: Webhook dedicado, provider próprio e modo sandbox para validar sem afetar WAHA.
+- **RAG Federado (modo all)**: Configure `LEGAL_DATA_SOURCE_MODE=all` para buscar simultaneamente Câmara, Senado, Querido Diário e Base dos Dados.
 
 ## Próximos Passos
 - Expandir conectores do DataHub.

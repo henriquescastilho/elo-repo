@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     twilio_auth_token: str | None = None
     twilio_whatsapp_number: str | None = None
 
+    # Telegram settings
+    telegram_enabled: bool = Field(default=False)
+    telegram_bot_token: str | None = None
+    telegram_webhook_secret: str | None = None
+    telegram_base_url: str = Field(default="https://api.telegram.org")
+    telegram_sandbox_mode: bool = Field(default=True)
+
     redis_url: str | None = None
 
     api_camara_base_url: str | None = None
