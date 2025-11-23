@@ -21,7 +21,7 @@ def _sanitize_type(raw_type: str | None) -> str:
         return "audio"
     if normalized in ("image", "photo", "sticker"):
         return "image"
-    if normalized in ("document", "file", "pdf", "video"):
+    if normalized in ("document", "file", "pdf", "video", "ppt", "xls", "doc", "docx", "xlsx", "pptx"):
         return "file"
     return "text" if normalized in ("chat", "unknown") else normalized
 
@@ -161,7 +161,13 @@ async def whatsapp_webhook(request: Request) -> JSONResponse:
 
     try:
         if not already_delivered:
-            mode = "texto+audio" if settings.send_audio_default else "texto"
+            # Se o usuário mandou áudio, respondemos com áudio também (espelhamento)
+            # Ou se a configuração padrão for enviar áudio sempre.
+            if normalized_type == "audio" or settings.send_audio_default:
+                mode = "texto+audio"
+            else:
+                mode = "texto"
+
             await response_service.responder_usuario(
                 to=user_id,
                 text=reply,

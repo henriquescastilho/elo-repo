@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO")
     log_format: str = Field(default="text") # text or json
     sentry_dsn: str | None = Field(default=None)
-    send_audio_default: bool = Field(default=False)
+    send_audio_default: bool = Field(default=True)
 
 
 @lru_cache()

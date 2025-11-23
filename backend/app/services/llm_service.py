@@ -216,13 +216,28 @@ async def answer_user_question(
     ]
 
     # Vision support
-    if context and getattr(context, "media_url", None) and getattr(context, "type", "") == "image":
-        logger.info("Incorporating image into LLM prompt: %s", context.media_url)
-        user_content = [
-            {"type": "text", "text": user_prompt},
-            {"type": "image_url", "image_url": {"url": context.media_url}},
-        ]
-        messages.append({"role": "user", "content": user_content})
+    if context and getattr(context, "media_url", None):
+        msg_type = getattr(context, "type", "")
+        if msg_type == "image":
+            logger.info("Incorporating image into LLM prompt: %s", context.media_url)
+            user_content = [
+                {"type": "text", "text": user_prompt},
+                {"type": "image_url", "image_url": {"url": context.media_url}},
+            ]
+            messages.append({"role": "user", "content": user_content})
+        elif msg_type == "file":
+            logger.info("Incorporating file info into LLM prompt: %s", context.media_url)
+            # For now, we just tell the LLM a file was sent.
+            # Ideally, we would extract text here if possible.
+            file_prompt = (
+                f"{user_prompt}\n\n"
+                f"[SISTEMA: O usuário enviou um arquivo/documento. URL: {context.media_url}. "
+                "Se for um PDF ou documento que você não consegue ler diretamente, avise o usuário que recebeu "
+                "e pergunte do que se trata, ou peça para ele mandar uma foto se for curto.]"
+            )
+            messages.append({"role": "user", "content": file_prompt})
+        else:
+            messages.append({"role": "user", "content": user_prompt})
     else:
         messages.append({"role": "user", "content": user_prompt})
 

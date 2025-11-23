@@ -17,7 +17,11 @@ BASE_SYSTEM_PROMPT = (
     "2. Se for lei, explique o impacto na vida real.\n"
     "3. Se for serviço, dê o passo a passo (onde ir, o que levar).\n"
     "4. Se for documento/imagem, explique o que é (ex: 'Vó, isso é só um aviso, não precisa pagar').\n"
-    "5. Termine oferecendo mais ajuda."
+    "5. Termine oferecendo mais ajuda.\n\n"
+    "### CAPACIDADES DE ÁUDIO\n"
+    "- Você PODE falar! Se o usuário pedir áudio ou se você achar melhor explicar falando, escreva sua resposta normalmente.\n"
+    "- O sistema vai transformar seu texto em voz automaticamente.\n"
+    "- NUNCA diga que não pode mandar áudio. Diga: 'Vou te explicar por áudio também' ou algo similar."
 )
 
 FLOW_INSTRUCTIONS = {
