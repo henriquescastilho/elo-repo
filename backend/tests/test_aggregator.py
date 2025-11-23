@@ -19,5 +19,5 @@ async def test_aggregator_search_all():
     # Check structure
     first = results[0]
     assert "id" in first
-    assert "titulo" in first
-    assert "conteudo" in first
+    assert "title" in first
+    assert "summary" in first

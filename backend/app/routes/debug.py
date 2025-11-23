@@ -21,3 +21,17 @@ async def provider_test(to: str = "5511999999999@c.us", text: str = "ping"):
         return {"status": "ok", "provider_status": "delivered", "details": result}
     except Exception as exc:
         return {"status": "ok", "provider_status": "failed", "error": str(exc)}
+
+
+@router.get("/rag/federado")
+async def debug_rag_federado(query: str):
+    """
+    Debug: Test federated search across all DataHub sources.
+    """
+    from backend.app.services.datahub import aggregator
+    results = await aggregator.search_all_sources(query)
+    return {
+        "query": query,
+        "count": len(results),
+        "results": results
+    }

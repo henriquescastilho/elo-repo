@@ -139,9 +139,9 @@ def _build_langchain_retriever(docs: List[Dict[str, Any]]):
     return vectorstore.as_retriever(search_kwargs={"k": 3})
 
 
-async def search_relevant_documents(query: str) -> List[Dict[str, Any]]:
+async def search_relevant_documents(query: str, mode: str | None = None) -> List[Dict[str, Any]]:
     settings = get_settings()
-    mode = settings.legal_data_source_mode.lower()
+    mode = (mode or settings.legal_data_source_mode).lower()
 
     if mode == "mock":
         logger.info("RAG using mock mode")
@@ -149,6 +149,10 @@ async def search_relevant_documents(query: str) -> List[Dict[str, Any]]:
     elif mode == "api":
         logger.info("RAG using API mode (Câmara only)")
         docs = await _search_api_camara(query)
+    elif mode == "legal_only":
+        logger.info("RAG using DataHub Aggregator (Legal Sources)")
+        from backend.app.services.datahub import aggregator
+        docs = await aggregator.search_legal_sources(query)
     elif mode == "all":
         logger.info("RAG using DataHub Aggregator (All Sources)")
         from backend.app.services.datahub import aggregator

@@ -19,21 +19,46 @@ def _tts_output_path() -> Path:
 
 
 async def _call_tts_openai(text: str, settings: Settings) -> Tuple[str, bool]:
-    if not settings.openai_api_key:
-        logger.warning("OPENAI_API_KEY ausente para TTS; usando fallback.")
-        return FALLBACK_AUDIO_URL, False
-    try:
-        from openai import AsyncOpenAI
-    except ImportError:
-        logger.warning("SDK OpenAI não está instalado para TTS.")
-        return FALLBACK_AUDIO_URL, False
-
-    client = AsyncOpenAI(
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_api_base or "https://api.openai.com/v1",
-    )
-    model = getattr(settings, "tts_model_name", None) or "gpt-4o-mini-tts"
+    provider = (settings.tts_provider or "openai").lower()
+    client = None
+    model = None
     voice = getattr(settings, "tts_voice", None) or "alloy"
+
+    if provider == "azure":
+        if not settings.azure_openai_api_key or not settings.azure_openai_endpoint:
+            logger.warning("Azure OpenAI config missing for TTS.")
+            return FALLBACK_AUDIO_URL, False
+        try:
+            from openai import AsyncAzureOpenAI
+            client = AsyncAzureOpenAI(
+                api_key=settings.azure_openai_api_key,
+                azure_endpoint=settings.azure_openai_endpoint,
+                api_version=settings.azure_openai_api_version,
+            )
+            model = (
+                settings.azure_tts_deployment_name
+                or getattr(settings, "tts_model_name", None)
+                or settings.azure_deployment_name
+                or "gpt-4o-mini-tts"
+            )
+        except ImportError:
+            logger.warning("OpenAI SDK not installed.")
+            return FALLBACK_AUDIO_URL, False
+    else:
+        if not settings.openai_api_key:
+            logger.warning("OPENAI_API_KEY ausente para TTS; usando fallback.")
+            return FALLBACK_AUDIO_URL, False
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(
+                api_key=settings.openai_api_key,
+                base_url=settings.openai_api_base or "https://api.openai.com/v1",
+            )
+            model = getattr(settings, "tts_model_name", None) or "gpt-4o-mini-tts"
+        except ImportError:
+            logger.warning("SDK OpenAI não está instalado para TTS.")
+            return FALLBACK_AUDIO_URL, False
+
     output_path = _tts_output_path()
     try:
         async with client.audio.speech.with_streaming_response.create(
@@ -44,7 +69,7 @@ async def _call_tts_openai(text: str, settings: Settings) -> Tuple[str, bool]:
         ) as response:
             await response.stream_to_file(output_path)
     except Exception as exc:  # pragma: no cover - external dependency
-        logger.exception("OpenAI TTS falhou: %s", exc)
+        logger.exception("%s TTS falhou: %s", provider.upper(), exc)
         return FALLBACK_AUDIO_URL, False
 
     return str(output_path), True
@@ -56,7 +81,7 @@ async def generate_tts_and_upload(text: str, context: Any) -> str:
     provider = (settings.tts_provider or "openai").lower()
     logger.info("Generating TTS via %s for user=%s", provider, getattr(context, "user_id", "unknown"))
 
-    if provider == "openai":
+    if provider in ("openai", "azure"):
         audio_ref, success = await _call_tts_openai(text, settings)
         return audio_ref if success else FALLBACK_AUDIO_URL
 

@@ -17,4 +17,4 @@ async def send_pl_update(user_id: str, message: str) -> None:
     logger.info("[notifications] Atualização PL interna (n8n desativado) user=%s msg=%s", user_id, message)
 
 
-# TODO: manter assinatura para futuras integrações externas se necessário.
+# Mantendo assinatura para futuras integrações externas se necessário.

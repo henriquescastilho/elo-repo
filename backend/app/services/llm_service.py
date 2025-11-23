@@ -1,5 +1,6 @@
 """LLM orchestration layer."""
 
+import base64
 import hashlib
 import logging
 from typing import Any, List, Tuple
@@ -16,39 +17,59 @@ FALLBACK_LLM_MESSAGE = (
 )
 
 
-async def _call_llm_openai(system_prompt: str, user_prompt: str, settings: Settings) -> Tuple[str, bool]:
-    if not settings.openai_api_key:
-        logger.warning("OPENAI_API_KEY ausente; devolvendo fallback.")
-        return FALLBACK_LLM_MESSAGE, False
-    try:
-        from openai import AsyncOpenAI
-    except ImportError:
-        logger.warning("SDK OpenAI não está instalado.")
-        return FALLBACK_LLM_MESSAGE, False
+async def _call_llm_openai(messages: List[dict[str, Any]], settings: Settings) -> Tuple[str, bool]:
+    provider = (settings.llm_provider or "openai").lower()
+    client = None
+    model = None
 
-    client = AsyncOpenAI(
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_api_base or "https://api.openai.com/v1",
-    )
-    model = getattr(settings, "llm_model_name", None) or "gpt-4o-mini"
+    if provider == "azure":
+        if not settings.azure_openai_api_key or not settings.azure_openai_endpoint:
+            logger.warning("Azure OpenAI config missing (key/endpoint).")
+            return FALLBACK_LLM_MESSAGE, False
+        try:
+            from openai import AsyncAzureOpenAI
+            client = AsyncAzureOpenAI(
+                api_key=settings.azure_openai_api_key,
+                azure_endpoint=settings.azure_openai_endpoint,
+                api_version=settings.azure_openai_api_version,
+            )
+            model = settings.azure_deployment_name or "gpt-4o"
+            temperature = None  # alguns modelos Azure não aceitam temperatura customizada
+        except ImportError:
+            logger.warning("OpenAI SDK não está instalado.")
+            return FALLBACK_LLM_MESSAGE, False
+
+    else:  # Default to OpenAI
+        if not settings.openai_api_key:
+            logger.warning("OPENAI_API_KEY ausente; devolvendo fallback.")
+            return FALLBACK_LLM_MESSAGE, False
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(
+                api_key=settings.openai_api_key,
+                base_url=settings.openai_api_base or "https://api.openai.com/v1",
+            )
+            model = getattr(settings, "llm_model_name", None) or "gpt-4o-mini"
+            temperature = 0.3
+        except ImportError:
+            logger.warning("SDK OpenAI não está instalado.")
+            return FALLBACK_LLM_MESSAGE, False
+
     try:
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.3,
-        )
+        create_kwargs = {"model": model, "messages": messages}
+        if temperature is not None:
+            create_kwargs["temperature"] = temperature
+
+        response = await client.chat.completions.create(**create_kwargs)
     except Exception as exc:  # pragma: no cover - external dependency path
-        logger.exception("OpenAI chat completion falhou: %s", exc)
+        logger.exception("%s chat completion falhou: %s", provider.upper(), exc)
         return FALLBACK_LLM_MESSAGE, False
 
     content = ""
     if response.choices:
         content = response.choices[0].message.content or ""
     if not content:
-        logger.warning("OpenAI retornou resposta vazia.")
+        logger.warning("%s retornou resposta vazia.", provider.upper())
         return FALLBACK_LLM_MESSAGE, False
     return content, True
 
@@ -81,6 +102,37 @@ def _build_legislative_context(documents: List[dict[str, Any]], limit: int = 5) 
     return "\n".join(lines)
 
 
+async def _get_conversation_history(user_id: str, limit: int = 3) -> str:
+    state = await cache_service.get_user_state(user_id)
+    if not state:
+        return ""
+    history = state.get("history", [])
+    if not history:
+        return ""
+    
+    # Format last N messages
+    formatted = []
+    for msg in history[-limit:]:
+        role = "Usuário" if msg["role"] == "user" else "Bot"
+        formatted.append(f"{role}: {msg['content']}")
+    return "\n".join(formatted)
+
+
+async def _update_conversation_history(user_id: str, user_text: str, bot_text: str) -> None:
+    state = await cache_service.get_user_state(user_id) or {}
+    history = state.get("history", [])
+    
+    history.append({"role": "user", "content": user_text})
+    history.append({"role": "assistant", "content": bot_text})
+    
+    # Keep only last 10 turns to save space
+    if len(history) > 20:
+        history = history[-20:]
+        
+    state["history"] = history
+    await cache_service.set_user_state(user_id, state)
+
+
 async def answer_user_question(
     user_text: str,
     context: NormalizedMessage | Any = None,
@@ -103,13 +155,28 @@ async def answer_user_question(
     # Se for Oráculo, pulamos o RAG legislativo e focamos no contexto da mensagem (media, arquivos)
     if flow_key == "oraculo":
         logger.info("Fluxo Oráculo: pulando RAG legislativo.")
-        # Aqui poderíamos processar o conteúdo do arquivo/imagem se já não estiver no texto.
-        # Por enquanto, assumimos que o 'context' (NormalizedMessage) traz info suficiente ou o texto já descreve.
         legislative_context = "(Modo Oráculo: Responda com base no arquivo/áudio/imagem enviado pelo usuário)"
     else:
+        # Define RAG mode based on flow
+        rag_mode = "legal_only" if flow_key == "votos" else "mock"
+        
+        # For ELO, we might want to use "all" if the query implies searching for services, 
+        # but for now let's stick to "mock" or "legal_only" as per plan.
+        # Actually, let's use "all" for VOTOS to get everything, and "legal_only" for ELO if needed.
+        # Plan says: VOTOS -> RAG federado sempre. ELO -> RAG só para direito.
+        
+        if flow_key == "votos":
+            rag_mode = "all"
+        elif flow_key == "elo":
+            # Simple heuristic: if query has "lei", "direito", "beneficio", use legal search
+            if any(k in normalized_question for k in ["lei", "direito", "beneficio", "auxilio"]):
+                rag_mode = "legal_only"
+            else:
+                rag_mode = "mock" # Or skip RAG?
+
         try:
-            documents = await rag_service.search_relevant_documents(normalized_question)
-            logger.debug("Retrieved %d documents for grounding", len(documents))
+            documents = await rag_service.search_relevant_documents(normalized_question, mode=rag_mode)
+            logger.debug("Retrieved %d documents for grounding (mode=%s)", len(documents), rag_mode)
         except Exception:
             logger.exception("Falha ao buscar documentos para grounding")
         
@@ -132,14 +199,35 @@ async def answer_user_question(
             "como base da sua resposta. Explique em linguagem simples o que eles significam para a vida do cidadão."
         )
 
+    # Recuperar histórico
+    history_text = await _get_conversation_history(user_id)
+    
     user_prompt = (
-        f"Pergunta do usuário: {normalized_question}\n"
+        f"Histórico da conversa:\n{history_text}\n\n"
+        f"Pergunta atual do usuário: {normalized_question}\n"
         "Contexto federado (resuma em poucas linhas):\n"
         f"{legislative_context or '- Sem contexto externo; responda com orientação geral e clara.'}\n"
         "Responda em português brasileiro simples, frases curtas, e inclua um exemplo prático quando ajudar a entender."
     )
 
-    answer, success = await _call_llm_openai(system_prompt, user_prompt, settings)
+    # Construct messages list
+    messages = [
+        {"role": "system", "content": system_prompt},
+    ]
+
+    # Vision support
+    if context and getattr(context, "media_url", None) and getattr(context, "type", "") == "image":
+        logger.info("Incorporating image into LLM prompt: %s", context.media_url)
+        user_content = [
+            {"type": "text", "text": user_prompt},
+            {"type": "image_url", "image_url": {"url": context.media_url}},
+        ]
+        messages.append({"role": "user", "content": user_content})
+    else:
+        messages.append({"role": "user", "content": user_prompt})
+
+    answer, success = await _call_llm_openai(messages, settings)
     if success:
         await cache_service.set_cached_answer(cache_key, answer)
+        await _update_conversation_history(user_id, normalized_question, answer)
     return answer

@@ -17,22 +17,33 @@ class Settings(BaseSettings):
 
     openai_api_key: str | None = Field(default=None)
     openai_api_base: str | None = Field(default="https://api.openai.com/v1")
-    llm_model_name: str = Field(default="gpt-4o-mini")
+    
+    # Azure OpenAI Settings
+    azure_openai_api_key: str | None = Field(default=None)
+    azure_openai_endpoint: str | None = Field(default="https://vitor-miawfa47-swedencentral.cognitiveservices.azure.com/")
+    azure_openai_api_version: str = Field(default="2024-12-01-preview")
+    azure_deployment_name: str | None = Field(default="gpt-4oElo") # For Chat
+    azure_embedding_deployment: str | None = Field(default=None) # For Embeddings
+    azure_tts_deployment_name: str | None = Field(default="gpt-4o-mini-tts")
+    azure_stt_deployment_name: str | None = Field(default="whisper-1")
+    
+    llm_model_name: str = Field(default="gpt-4o")
     tts_model_name: str = Field(default="gpt-4o-mini-tts")
     tts_voice: str = Field(default="alloy")
     stt_model_name: str = Field(default="whisper-1")
     vision_model_name: str = Field(default="gpt-4o")
     embedding_model_name: str = Field(default="text-embedding-3-small")
 
-    llm_provider: str = Field(default="openai")
-    tts_provider: str = Field(default="openai")
-    stt_provider: str = Field(default="openai")
-    vision_provider: str = Field(default="openai")
+    llm_provider: str = Field(default="azure")
+    tts_provider: str = Field(default="azure")
+    stt_provider: str = Field(default="azure")
+    vision_provider: str = Field(default="azure")
 
     elevenlabs_api_key: str | None = None
     elevenlabs_voice_id: str | None = None
 
     whatsapp_provider: str = Field(default="waha")
+    whatsapp_sandbox_mode: bool = Field(default=False)
 
     waha_base_url: str | None = None
     waha_api_token: str | None = None
@@ -48,6 +59,8 @@ class Settings(BaseSettings):
     legal_data_source_mode: str = Field(default="mock")
 
     log_level: str = Field(default="INFO")
+    log_format: str = Field(default="text") # text or json
+    sentry_dsn: str | None = Field(default=None)
     send_audio_default: bool = Field(default=False)
 
 

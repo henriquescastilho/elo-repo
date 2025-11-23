@@ -40,6 +40,46 @@ async def set_cached_answer(hash_key: str, answer: str, ttl: int = 600) -> None:
 
 
 USER_STATE_PREFIX = "user_state:"
+MESSAGE_SEEN_PREFIX = "msg_seen:"
+_seen_message_memory: dict[str, float] = {}
+
+
+def _prune_seen_messages(ttl: int) -> None:
+    """Remove mensagens antigas do cache em memória para evitar crescimento infinito."""
+    import time
+
+    now = time.time()
+    to_delete = [msg_id for msg_id, ts in _seen_message_memory.items() if now - ts > ttl]
+    for msg_id in to_delete:
+        _seen_message_memory.pop(msg_id, None)
+
+
+async def is_duplicate_message(message_id: str, ttl: int = 300) -> bool:
+    """
+    Marca o ID da mensagem e retorna True se ela já tiver sido processada recentemente.
+    Usa Redis quando disponível; caso contrário, mantém um cache em memória com TTL.
+    """
+    if not message_id:
+        return False
+
+    if redis_client:
+        try:
+            # SET NX retorna True se a chave foi criada (não era duplicada)
+            created = await redis_client.set(
+                f"{MESSAGE_SEEN_PREFIX}{message_id}", "1", ex=ttl, nx=True
+            )
+            return not bool(created)
+        except Exception as exc:  # pragma: no cover - network failures
+            logger.warning("Redis set message_seen falhou: %s", exc)
+
+    _prune_seen_messages(ttl)
+    if message_id in _seen_message_memory:
+        return True
+
+    import time
+
+    _seen_message_memory[message_id] = time.time()
+    return False
 
 
 async def get_user_state(user_id: str) -> Optional[dict]:

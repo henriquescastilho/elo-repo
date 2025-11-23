@@ -1,44 +1,66 @@
-# Arquitetura – ELO Assistente Cidadão
+# Arquitetura – ELO Assistente Cidadão 2.0
 
-## Visão geral
-- **App FastAPI** (`backend/app/main.py`) expõe rotas:
-  - `GET /health`
-  - `GET /debug/ping`
-  - `POST /webhook/whatsapp` (entrada WAHA/Twilio)
-- **Identidade do bot**: `core/config/bot_identity.py` define `BOT_NAME` e projetos (`ELO Assistente Cidadão`, `VOTOS Interativo`).
-- **Roteamento de intenções**: `core/router/intents.py` normaliza texto, detecta intenção (ELO ou VOTOS) e despacha para `core/flows/elo_flow.py` ou `core/flows/votos_flow.py`.
-- **Fluxos**:
-  - `elo_flow`: perguntas de serviços públicos/direitos.
-  - `votos_flow`: votações, plenário, deputados.
-- **LLM**: `services/llm_service.py` usa `core/llm/prompt_base.py` + RAG (`services/rag_service.py`) e cache (`services/cache_service.py`).
-- **WAHA client**: `infra/waha_client.py` centraliza `send_text`, `send_voice`, `send_image`.
-- **Providers WhatsApp**: `services/whatsapp_provider_waha.py` e `services/whatsapp_provider_twilio.py` chamam o cliente centralizado ou a API Twilio.
-- **Resposta ao usuário**: `services/response_service.py` envia texto e opcionalmente áudio via TTS (`core/tts/service.py` + `services/tts_service.py`).
-- **STT/Visão**: `services/stt_service.py` e `services/vision_service.py` (placeholders).
-- **Notificações**: `services/notifications_service.py` apenas faz logs internos; integração com n8n está desativada/ opcional.
+## Visão Geral
+O **ELO Assistente Cidadão** é um sistema de IA cívica projetado para democratizar o acesso à informação legislativa e serviços públicos. A versão 2.0 introduz uma arquitetura federada, detecção automática de intenção e integração profunda com múltiplos provedores de dados.
 
-## Fluxo principal de mensagem
-1. WAHA envia evento `message`/`message.any` para `POST /webhook/whatsapp`.
-2. Handler valida remetente, destino e texto; normaliza conteúdo.
-3. `dispatch_message` decide intenção (VOTOS se palavras-chave de parlamento; senão ELO).
-4. Fluxo selecionado chama `llm_service.answer_user_question` com prompt base e instruções do fluxo.
-5. `response_service.responder_usuario` envia texto via provedor configurado; se `settings.send_audio_default` ou modo `texto+audio`, gera TTS e envia áudio via WAHA/Twilio.
+## Componentes Principais
 
-## Pontos WAHA
-- **Webhook**: `POST /webhook/whatsapp` consome payload WAHA (`event`, `payload.*`, `me.id`).
-- **Envio de texto**: `infra/waha_client.send_text` → `POST {WAHA_BASE_URL}/api/sendText`.
-- **Envio de voz**: `infra/waha_client.send_voice` converte se necessário (`/api/{session}/media/convert/voice`) e chama `/api/sendVoice`.
-- **Envio de imagem**: `infra/waha_client.send_image` → `/api/sendImage` (com caption opcional).
+### 1. Core & Router (`backend/app/core`)
+- **Intent Engine (`core/router/intents.py`)**: Analisa cada mensagem e decide automaticamente o modo de operação:
+  - **ELO**: Dúvidas sobre serviços, direitos e cidadania.
+  - **VOTOS**: Consultas sobre projetos de lei, votações e parlamentares.
+  - **ORÁCULO**: Processamento de mídia (áudio, imagem, documentos) e links externos.
+- **Bot Identity (`core/config/bot_identity.py`)**: Define a persona e o tom de voz (PT-BR simples, acolhedor).
 
-## Prompt e linguagem
-- `core/llm/prompt_base.py`: instruções de sistema em PT-BR simples; sem juridiquês.
-- Fluxos adicionam instruções específicas (ELO vs VOTOS) antes de gerar resposta.
+### 2. DataHub Federado (`backend/app/services/datahub`)
+Camada de abstração que unifica múltiplas fontes de dados públicos:
+- **Aggregator**: Orquestra consultas paralelas e normaliza resultados.
+- **Conectores**:
+  - `camara_service`: API da Câmara dos Deputados.
+  - `senado_service`: API do Senado Federal.
+  - `queridodiario_service`: Diários Oficiais municipais.
+  - `basedosdados_service`: Estatísticas e dados estruturados.
+  - `tse_service`: Dados eleitorais.
+  - `datajud_service`: Jurisprudência e processos.
 
-## Configuração chave (`backend/app/config.py`)
-- `whatsapp_provider` (`waha`/`twilio`), `waha_base_url`, `waha_api_token`, `waha_session_name`.
-- `openai_api_key/openai_api_base`, `llm_provider`, `tts_provider`, `stt_provider`.
-- `send_audio_default`: habilita áudio adicional por padrão.
-- `redis_url` (cache), `api_camara_base_url`.
+### 3. RAG Avançado (`backend/app/services/rag_service.py`)
+Sistema de Recuperação Aumentada por Geração:
+- **Embeddings**: OpenAI `text-embedding-3-small`.
+- **Vector Store**: FAISS (local) ou RedisVL.
+- **Fluxo**:
+  1. Recebe query do usuário.
+  2. Busca documentos relevantes no DataHub (federado).
+  3. Classifica e filtra os melhores resultados.
+  4. Injeta contexto no prompt do LLM.
 
-## Diferencial
-- O ELO não depende de ferramentas low-code externas (como n8n); toda a orquestração roda no backend integrando WAHA + FastAPI + LLM/TTS.
+### 4. Integração LLM (`backend/app/services/llm_service.py`)
+- **Multi-Provider**: Suporte híbrido para **OpenAI** e **Azure OpenAI**.
+- **Factory Pattern**: Abstração que permite troca de provedor via configuração (`LLM_PROVIDER`, `TTS_PROVIDER`, `STT_PROVIDER`).
+- **Prompt Engineering**: Prompts dinâmicos baseados no modo (ELO/VOTOS/ORÁCULO) e contexto recuperado.
+- **Cache**: Redis para evitar custos repetitivos em perguntas frequentes.
+
+### 5. Canais & Multimídia
+- **WhatsApp Provider**:
+  - **WAHA (WhatsApp HTTP API)**: Principal gateway.
+  - **Console/Sandbox**: Para desenvolvimento e testes sem celular.
+- **Multimodalidade**:
+  - **TTS**: Geração de áudio para respostas (OpenAI Audio).
+  - **STT**: Transcrição de mensagens de voz (Whisper).
+  - **Vision**: Análise de imagens enviadas pelo usuário (GPT-4o Vision).
+
+## Fluxo de Dados
+
+1. **Entrada**: Webhook recebe mensagem (`POST /webhook/whatsapp`).
+2. **Roteamento**: `dispatch_message` detecta intenção.
+3. **Processamento**:
+   - Se **ORÁCULO**: Processa mídia/link diretamente.
+   - Se **VOTOS**: Aciona DataHub para buscar dados legislativos + RAG.
+   - Se **ELO**: Aciona RAG para base legal de direitos (se necessário) ou responde com conhecimento geral.
+4. **Geração**: LLM gera resposta em linguagem simples com base no contexto.
+5. **Saída**: Texto (e opcionalmente áudio) enviado via Provider.
+
+## Infraestrutura
+- **Backend**: FastAPI (Python 3.11+).
+- **Container**: Docker + Docker Compose.
+- **Cache**: Redis.
+- **Dependências Externas**: APIs Públicas (Câmara, Senado, etc.), OpenAI API.

@@ -1,29 +1,35 @@
-# Resumo das mudanças – ELO Assistente Cidadão
+# Resumo das Mudanças – ELO Assistente Cidadão 2.0
 
-## O que foi alterado
-- Documentação inicial de arquitetura (`docs/RAIO_X_ELO.md`) e detalhamento atualizado (`docs/ARQUITETURA_ELO.md`).
-- Identidade única do bot (`core/config/bot_identity.py`) com projetos: ELO Assistente Cidadão e VOTOS Interativo.
-- Camada de roteamento de intenções (`core/router/intents.py`) que normaliza texto e distingue fluxos ELO vs VOTOS.
-- Fluxos separados (`core/flows/elo_flow.py`, `core/flows/votos_flow.py`) integrados ao webhook do WhatsApp.
-- Cliente WAHA centralizado (`infra/waha_client.py`) para texto/voz/imagem com retries.
-- Provider WAHA atualizado para usar o cliente central; Twilio mantido.
-- Prompt base em PT-BR simples (`core/llm/prompt_base.py`) aplicado no `llm_service`.
-- Camada de resposta com texto e áudio (`services/response_service.py`) usando TTS (`core/tts/service.py`) e flag `SEND_AUDIO_DEFAULT`.
-- README ampliado com visão rápida dos fluxos e do módulo VOTOS.
-- Dependência de n8n removida: notificações são internas (logs) e qualquer orquestrador externo é opcional/desativado.
+## Principais Inovações
 
-## Onde estão os fluxos principais
-- `POST /webhook/whatsapp` → normaliza mensagem → `dispatch_message` → `elo_flow` ou `votos_flow` → `llm_service` (prompt base + RAG) → `response_service`.
-- Fluxo ELO: orientações sobre serviços públicos e direitos, linguagem simples.
-- Fluxo VOTOS: votações, plenário, deputados/senadores, também com linguagem simples.
+### 1. Detecção Automática de Intenção
+O usuário não precisa mais escolher menus ou digitar comandos. O sistema entende o contexto:
+- Perguntou de lei/deputado? -> **Modo VOTOS**.
+- Perguntou de benefício/documento? -> **Modo ELO**.
+- Mandou foto ou áudio? -> **Modo ORÁCULO**.
 
-## Integração de áudio
-- Flag `SEND_AUDIO_DEFAULT` em `backend/app/config.py`.
-- `response_service.responder_usuario` sempre envia texto; se áudio habilitado ou solicitado (`modo="texto+audio"`), chama TTS (`core/tts/service.py` → `services/tts_service.py`) e envia via WAHA/Twilio.
-- WAHA: `infra/waha_client.send_voice` converte áudio se necessário e usa `/api/sendVoice`.
+### 2. DataHub Federado
+Centralização de acesso a dados públicos. Em vez de consultar apenas uma fonte, o ELO agora varre:
+- Câmara e Senado (Legislativo Federal).
+- Querido Diário (Atos municipais).
+- Base dos Dados, TSE e DataJud (em expansão).
 
-## Convivência dos dois projetos no mesmo bot
-- Roteador de intenções decide dinamicamente ELO vs VOTOS sem alterar a rota pública (`/webhook/whatsapp`).
-- Identidade e projetos padronizados em config, evitando strings soltas.
-- Prompt único garante tom consistente nos dois fluxos; cada fluxo adiciona instruções específicas.
-- Envio unificado (texto/áudio) via `response_service` e cliente WAHA centralizado, mantendo compatibilidade com Twilio.
+### 3. RAG (Retrieval Augmented Generation) Aprimorado
+- Busca semântica e por palavras-chave combinadas.
+- Respostas fundamentadas em documentos reais, reduzindo alucinações.
+- Citação de fontes (ex: "Segundo a Lei 12.345...").
+
+### 4. Multimodalidade Real
+- **Voz**: O ELO ouve áudios e responde em texto (ou áudio).
+- **Visão**: O ELO vê fotos de documentos ou problemas urbanos e orienta.
+
+### 5. Infraestrutura Robusta
+- **Multi-Provider**: Escolha entre OpenAI e Azure para LLM, TTS e STT.
+- **Logs Estruturados**: Logs em JSON para fácil ingestão em ferramentas de observabilidade.
+- **Sandbox WhatsApp**: Desenvolva sem precisar de um celular conectado o tempo todo.
+- **Testes Automatizados**: Cobertura de testes para garantir a estabilidade das intenções e integrações.
+
+## Próximos Passos
+- Expandir conectores do DataHub.
+- Implementar notificações ativas (usuário segue um PL e recebe updates).
+- Refinar a personalidade do bot com feedback real.
