@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
 from backend.app.services import llm_service, tts_service, stt_service
-from backend.app.config import get_settings
 
 @pytest.mark.anyio
 async def test_llm_provider_switch_azure():

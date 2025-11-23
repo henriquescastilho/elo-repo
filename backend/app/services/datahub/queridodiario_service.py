@@ -11,7 +11,7 @@ async def fetch(query: str) -> List[Dict[str, Any]]:
     Busca em Diários Oficiais via Querido Diário (Open Knowledge Brasil).
     Endpoint: https://queridodiario.ok.org.br/api/v1/publicacoes/
     """
-    query_lower = query.lower()
+    query.lower()
     base_url = "https://queridodiario.ok.org.br"
     endpoint = f"{base_url.rstrip('/')}/api/v1/publicacoes/"
     params = {"querystring": query, "page_size": 5}

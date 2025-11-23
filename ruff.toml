@@ -1,0 +1,8 @@
+[lint]
+# Ignore E402 (module level import not at top of file) for specific files where it's intentional
+[lint.per-file-ignores]
+"backend/app/main.py" = ["E402"]
+"backend/app/services/llm_service.py" = ["E402"]
+"backend/app/services/response_service.py" = ["E402"]
+"backend/app/services/datahub/aggregator.py" = ["E402"]
+"backend/tests/test_provider_switch_mocked.py" = ["E402"]

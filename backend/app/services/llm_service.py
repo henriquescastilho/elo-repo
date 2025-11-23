@@ -1,6 +1,5 @@
 """LLM orchestration layer."""
 
-import base64
 import hashlib
 import logging
 from typing import Any, List, Tuple
@@ -17,7 +16,7 @@ FALLBACK_LLM_MESSAGE = (
 )
 
 
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, RetryCallState
+from tenacity import retry, stop_after_attempt, wait_exponential, RetryCallState
 
 def return_fallback_on_failure(retry_state: RetryCallState) -> Tuple[str, bool]:
     logger.error("Tenacity retries exhausted: %s", retry_state.outcome.exception())

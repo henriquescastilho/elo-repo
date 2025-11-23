@@ -11,7 +11,7 @@ async def fetch(query: str) -> List[Dict[str, Any]]:
     Busca datasets públicos na Base dos Dados via API CKAN.
     Endpoint: https://basedosdados.org/api/3/action/package_search
     """
-    query_lower = query.lower()
+    query.lower()
     url = "https://basedosdados.org/api/3/action/package_search"
     params = {"q": query, "rows": 5}
 

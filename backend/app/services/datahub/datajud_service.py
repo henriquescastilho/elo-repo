@@ -1,7 +1,6 @@
 import logging
 import httpx
 from typing import List, Dict, Any
-import json
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +53,7 @@ async def fetch(query: str) -> List[Dict[str, Any]]:
                     "titulo": f"Processo {source.get('numeroProcesso')}",
                     "conteudo": source.get("assuntos", [{}])[0].get("nome") or "Sem descrição",
                     "data": source.get("dataAjuizamento") or "",
-                    "link": f"https://datajud.cnj.jus.br/" # Link genérico pois o deep link varia
+                    "link": "https://datajud.cnj.jus.br/" # Link genérico pois o deep link varia
                 })
             
             return results

@@ -1,6 +1,5 @@
 """WAHA WhatsApp provider integration using centralized client."""
 
-import logging
 
 from backend.app.config import get_settings
 from backend.app.core.exceptions import ProviderError

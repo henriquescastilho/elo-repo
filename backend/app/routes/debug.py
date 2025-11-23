@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 from backend.app.infra import waha_client
 from backend.app.services import response_service
 

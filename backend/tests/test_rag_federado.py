@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import patch, AsyncMock
 from backend.app.services import rag_service
-from backend.app.config import get_settings
 
 @pytest.mark.anyio
 async def test_rag_search_legal_only():

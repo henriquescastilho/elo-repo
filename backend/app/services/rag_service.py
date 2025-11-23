@@ -1,6 +1,5 @@
 """Retrieval augmented generation helpers with optional LangChain support."""
 
-import logging
 import os
 from typing import Any, Dict, List
 

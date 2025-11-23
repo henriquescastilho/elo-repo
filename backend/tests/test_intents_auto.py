@@ -1,4 +1,3 @@
-import pytest
 from backend.app.core.router.intents import detect_intent, Intent
 from backend.app.models.schemas import NormalizedMessage
 

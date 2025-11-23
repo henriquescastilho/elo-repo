@@ -1,7 +1,6 @@
 import asyncio
 import httpx
 import time
-import random
 
 URL = "http://localhost:8000/webhook/whatsapp"
 CONCURRENCY = 10
@@ -22,7 +21,7 @@ async def send_request(client, i):
         resp = await client.post(URL, json=payload)
         elapsed = time.perf_counter() - start
         return resp.status_code, elapsed
-    except Exception as e:
+    except Exception:
         return "error", 0
 
 async def main():

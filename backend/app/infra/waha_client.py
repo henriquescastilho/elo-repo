@@ -3,7 +3,6 @@ Thin WAHA HTTP client to centralize WhatsApp delivery (text/voice/image).
 """
 
 import asyncio
-import logging
 import os
 from pathlib import Path
 from typing import Any, Optional

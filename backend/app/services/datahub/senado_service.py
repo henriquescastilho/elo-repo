@@ -26,7 +26,7 @@ async def fetch(query: str) -> List[Dict[str, Any]]:
     Busca matérias no Senado Federal usando Dados Abertos.
     Endpoint: https://legis.senado.leg.br/dadosabertos/materia/pesquisa/lista
     """
-    query_lower = query.lower()
+    query.lower()
     settings = get_settings()
     base_url = settings.api_senado_base_url or "https://legis.senado.leg.br/dadosabertos"
     endpoint = f"{base_url.rstrip('/')}/materia/pesquisa/lista"
